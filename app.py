@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 st.title("Control de peso - Línea de producción")
 
-productos = ['Jabón A', 'Jabón B', 'Jabón C', 'Detergente X', 'Detergente Y']
+productos = ['Super', 'Barra', 'Brilla King', 'Lima fresca 250', 'Edén 300', 'Cepillo']
 producto = st.selectbox("Producto:", productos)
 
 cantidad = st.number_input("Cantidad de pesos:", min_value=1, max_value=100, value=5)
@@ -48,3 +48,4 @@ if st.button("Calcular Cp y Cpk"):
         ax.set_ylabel("Peso")
         ax.legend()
         st.pyplot(fig)
+
