@@ -2,5 +2,5 @@ streamlit
 pandas
 numpy
 matplotlib
-streamlit-gsheets
+streamlit-gsheets==0.3.2
 
