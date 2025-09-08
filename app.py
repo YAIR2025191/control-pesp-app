@@ -2,7 +2,17 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from streamlit_gsheets import GSheetsConnection
+from gsheetsdb import connect
+
+conn = connect()
+query = "SELECT * FROM 'https://docs.google.com/spreadsheets/d/1jzNLXGsxc6orLQ1-IajlFka9ViEdc9nbC9POPnejxzs/edit#gid=0'"
+rows = conn.execute(query)
+data = [row for row in rows]
+
+# Aquí puedes convertir a DataFrame, por ejemplo:
+import pandas as pd
+df = pd.DataFrame(data)
+
 
 st.set_page_config(page_title="Control de Peso", layout="centered")
 st.title("📊 Control de Peso - Línea de Producción")
@@ -77,3 +87,4 @@ else:
 
     else:
         st.warning("⚠️ Se necesitan al menos 2 registros del producto seleccionado para calcular Cp y Cpk.")
+
