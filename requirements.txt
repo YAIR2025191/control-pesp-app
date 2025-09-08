@@ -2,7 +2,6 @@ streamlit
 pandas
 numpy
 matplotlib
-gsheetsdb
-google-auth
+gspread
 
 
