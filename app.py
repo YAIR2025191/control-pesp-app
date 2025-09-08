@@ -2,89 +2,66 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from gsheetsdb import connect
+import gspread
+from google.oauth2.service_account import Credentials
 
-conn = connect()
-query = "SELECT * FROM 'https://docs.google.com/spreadsheets/d/1jzNLXGsxc6orLQ1-IajlFka9ViEdc9nbC9POPnejxzs/edit#gid=0'"
-rows = conn.execute(query)
-data = [row for row in rows]
+# Configura las credenciales y acceso
+scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+creds = Credentials.from_service_account_file("credenciales.json", scopes=scope)
+client = gspread.authorize(creds)
 
-# Aquí puedes convertir a DataFrame, por ejemplo:
-import pandas as pd
+# Abrir hoja por URL y seleccionar worksheet
+sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1jzNLXGsxc6orLQ1-IajlFka9ViEdc9nbC9POPnejxzs/edit#gid=0")
+worksheet = sheet.worksheet("Hoja 1")
+
+# Leer datos actuales
+data = worksheet.get_all_records()
 df = pd.DataFrame(data)
 
+st.title("Control de Peso")
 
-st.set_page_config(page_title="Control de Peso", layout="centered")
-st.title("📊 Control de Peso - Línea de Producción")
-
-# --- Entrada de datos ---
-st.header("📥 Ingreso de datos")
 producto = st.text_input("Producto")
 peso = st.number_input("Peso (g)", min_value=0.0, step=0.1)
-lsl = st.number_input("LSL - Límite inferior", min_value=0.0, step=0.1)
-usl = st.number_input("USL - Límite superior", min_value=0.0, step=0.1)
+lsl = st.number_input("LSL", min_value=0.0, step=0.1)
+usl = st.number_input("USL", min_value=0.0, step=0.1)
 
-# --- Conexión con Google Sheets ---
-conn = st.connection("gsheet", type=GSheetsConnection)
-df = conn.read(worksheet="Hoja 1")  # Asegúrate de que tu hoja se llame "Hoja 1"
-
-# --- Validación y guardado ---
-if st.button("Guardar datos"):
-    if not producto:
-        st.error("⚠️ Debes ingresar el nombre del producto.")
-    elif peso == 0 or lsl == 0 or usl == 0:
-        st.error("⚠️ Peso, LSL y USL deben ser mayores que 0.")
-    elif lsl >= usl:
-        st.error("⚠️ LSL debe ser menor que USL.")
+if st.button("Guardar"):
+    if producto and peso > 0 and lsl > 0 and usl > 0 and lsl < usl:
+        worksheet.append_row([producto, peso, lsl, usl])
+        st.success("Datos guardados!")
+        st.experimental_rerun()
     else:
-        nuevo = {"producto": producto, "peso": peso, "lsl": lsl, "usl": usl}
-        df = pd.concat([df, pd.DataFrame([nuevo])], ignore_index=True)
-        conn.write(df)
-        st.success("✅ Datos guardados exitosamente en Google Sheets.")
+        st.error("Revisa que todos los campos estén completos y sean correctos.")
 
-# --- Mostrar datos históricos ---
-st.header("📊 Datos históricos")
+st.header("Datos históricos")
 if df.empty:
     st.info("No hay datos aún.")
 else:
     st.dataframe(df)
 
-    # Filtrar por producto
     productos = df["producto"].unique().tolist()
-    prod_seleccionado = st.selectbox("Selecciona un producto para análisis:", productos)
-
-    df_prod = df[df["producto"] == prod_seleccionado]
+    prod = st.selectbox("Producto para análisis", productos)
+    df_prod = df[df["producto"] == prod]
 
     if len(df_prod) >= 2:
-        pesos = df_prod["peso"].astype(float).values
+        pesos = df_prod["peso"].astype(float)
+        media = pesos.mean()
+        std = pesos.std(ddof=1)
         lsl_val = df_prod["lsl"].astype(float).iloc[-1]
         usl_val = df_prod["usl"].astype(float).iloc[-1]
+        Cp = (usl_val - lsl_val) / (6 * std)
+        Cpk = min(usl_val - media, media - lsl_val) / (3 * std)
 
-        media = np.mean(pesos)
-        std_dev = np.std(pesos, ddof=1)
-        Cp = (usl_val - lsl_val) / (6 * std_dev)
-        Cpk = min((usl_val - media), (media - lsl_val)) / (3 * std_dev)
+        st.write(f"Media: {media:.2f}")
+        st.write(f"Desviación estándar: {std:.3f}")
+        st.write(f"Cp: {Cp:.3f}")
+        st.write(f"Cpk: {Cpk:.3f}")
 
-        st.subheader("📈 Estadísticas del proceso")
-        st.write(f"Media: **{media:.2f} g**")
-        st.write(f"Desviación estándar: **{std_dev:.3f}**")
-        st.write(f"**Cp**: {Cp:.3f}")
-        st.write(f"**Cpk**: {Cpk:.3f}")
-
-        # --- Gráfica de control ---
-        st.subheader("📉 Gráfica de control")
-        fig, ax = plt.subplots(figsize=(10, 4))
-        ax.plot(pesos, marker='o', linestyle='-', color='blue', label='Peso')
-        ax.axhline(media, color='green', linestyle='--', label='Media')
-        ax.axhline(media + 3*std_dev, color='red', linestyle='--', label='Límite superior (UCL)')
-        ax.axhline(media - 3*std_dev, color='red', linestyle='--', label='Límite inferior (LCL)')
-        ax.set_title(f'Gráfico de Control - {prod_seleccionado}')
-        ax.set_xlabel("Muestra")
-        ax.set_ylabel("Peso (g)")
-        ax.grid(True)
-        ax.legend()
+        fig, ax = plt.subplots()
+        ax.plot(pesos.values, marker='o')
+        ax.axhline(media, color='green', linestyle='--')
+        ax.axhline(media + 3*std, color='red', linestyle='--')
+        ax.axhline(media - 3*std, color='red', linestyle='--')
         st.pyplot(fig)
-
     else:
-        st.warning("⚠️ Se necesitan al menos 2 registros del producto seleccionado para calcular Cp y Cpk.")
-
+        st.warning("Se necesitan al menos 2 registros para análisis.")
